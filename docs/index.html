@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f7f5ef">
-  <meta name="description" content="先生成二维码，手动放入图片，再加密发布最终图片。">
+  <meta name="description" content="同时制作三张带独立二维码的私密图片，并加密发布到 GitHub Pages。">
   <meta name="referrer" content="no-referrer">
   <title>私密图片发布器</title>
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=4-migration">
 </head>
 <body>
   <main class="studio" id="studio">
@@ -19,83 +19,98 @@
       <button class="text-button" id="open-settings-button" type="button">发布设置</button>
     </header>
 
+    <section class="migration-banner">
+      <strong>第零步：任务导出过渡版</strong>
+      <span>只用于把旧浏览器里的二维码任务导出成 JSON。请先点击下方“导出任务备份”，不要在这里生成新的二维码。</span>
+    </section>
+
     <section class="hero">
-      <p class="eyebrow">二维码先行 · 成品图后发布</p>
-      <h1>让二维码<br>回到这张图</h1>
-      <p class="hero-copy">先下载一个独立二维码，手动把它放进图片；再把带二维码的最终图片选回来，一键加密并发布。扫码后只出现这张最终图片。</p>
+      <div>
+        <p class="eyebrow">三张图片 · 三个独立二维码</p>
+        <h1>一次完成<br>三张回图</h1>
+      </div>
+      <p class="hero-copy">每个任务位都有独立地址和解密钥匙。分别下载二维码、手动放进对应图片，再选择三张最终图片；可以单独发布，也可以一键发布全部。</p>
     </section>
 
-    <section class="workflow" aria-label="制作流程">
-      <article class="step-card" id="qr-step">
-        <div class="step-heading">
-          <span class="step-number">1</span>
-          <div>
-            <p class="step-kicker">先做二维码</p>
-            <h2>生成并下载</h2>
-          </div>
-        </div>
-
-        <div class="qr-layout">
-          <div class="qr-preview" id="qr-preview-wrap">
-            <canvas id="qr-canvas" width="280" height="280" hidden></canvas>
-            <div class="qr-placeholder" id="qr-placeholder" aria-hidden="true">
-              <span></span><span></span><span></span><span></span><span></span>
-            </div>
-          </div>
-          <div class="step-copy">
-            <p id="qr-instruction">软件会为这张图预留一个随机地址和一把解密钥匙，并立即下载二维码 PNG。</p>
-            <div class="project-note" id="project-note" hidden>
-              <span class="status-dot"></span>
-              <span>当前二维码已锁定。请把它放进图片并导出最终图片。</span>
-            </div>
-            <button class="primary-button" id="generate-qr-button" type="button">生成并下载二维码</button>
-            <div class="inline-actions" id="qr-actions" hidden>
-              <button class="secondary-button" id="download-qr-button" type="button">再次下载</button>
-              <button class="link-button danger-link" id="new-project-button" type="button">放弃并生成新的</button>
-            </div>
-          </div>
-        </div>
-      </article>
-
-      <article class="step-card" id="publish-step">
-        <div class="step-heading">
-          <span class="step-number">2</span>
-          <div>
-            <p class="step-kicker">再发成品图</p>
-            <h2>选择并发布</h2>
-          </div>
-        </div>
-
-        <input id="final-image-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
-        <button class="drop-zone" id="drop-zone" type="button">
-          <span class="drop-icon" aria-hidden="true">＋</span>
-          <span class="drop-title" id="drop-title">选择已经带二维码的最终图片</span>
-          <span class="drop-subtitle">PNG、JPG、WebP 或 GIF，最大 25 MB</span>
-        </button>
-
-        <div class="image-preview-wrap" id="image-preview-wrap" hidden>
-          <img id="image-preview" alt="待发布成品图预览">
-          <button class="replace-button" id="replace-image-button" type="button">更换图片</button>
-        </div>
-
-        <button class="primary-button publish-button" id="publish-button" type="button" disabled>加密并自动发布</button>
-        <div class="publish-status" id="publish-status" role="status" hidden></div>
-        <p class="error-message" id="error-message" role="alert" hidden></p>
-        <button class="link-button fallback-button" id="download-bin-button" type="button" hidden>自动发布失败？下载 .bin 手动上传</button>
-      </article>
+    <section class="batch-toolbar" aria-label="批量操作">
+      <div>
+        <strong id="batch-summary">0 / 3 张已准备</strong>
+        <span>所有图片都只在当前浏览器中加密。</span>
+      </div>
+      <div class="toolbar-actions">
+        <input id="import-projects-input" type="file" accept="application/json,.json" hidden>
+        <button class="secondary-button" id="import-projects-button" type="button">导入任务备份</button>
+        <button class="secondary-button" id="export-projects-button" type="button" disabled>导出任务备份</button>
+        <button class="primary-button toolbar-button" id="publish-all-button" type="button" disabled>发布全部已准备图片</button>
+      </div>
     </section>
+
+    <section class="task-grid" id="task-grid" aria-label="三个图片任务"></section>
 
     <section class="privacy-strip">
       <div>
-        <strong>公开仓库里只有加密文件</strong>
-        <span>最终图片先在你的浏览器中加密，解密钥匙只写在二维码链接的 # 后面。</span>
+        <strong>每张图片互不影响</strong>
+        <span>三个二维码的编号和密钥完全独立，不会因为同时处理而串图。</span>
       </div>
       <div>
-        <strong>拿到二维码的人可以查看</strong>
-        <span>二维码相当于钥匙。没有二维码或完整扫码链接，仓库中的 .bin 无法直接看图。</span>
+        <strong>公开仓库只保存加密文件</strong>
+        <span>最终图片不会以普通图片格式上传；拿到对应二维码的人才能解密查看。</span>
+      </div>
+      <div>
+        <strong>域名应先确定</strong>
+        <span>自定义域名一旦写入二维码，换 GitHub 账号时仍可通过恢复文件继续使用。</span>
       </div>
     </section>
   </main>
+
+  <template id="task-template">
+    <article class="task-card">
+      <header class="task-heading">
+        <div>
+          <span class="task-index"></span>
+          <h2 class="task-title"></h2>
+        </div>
+        <span class="task-badge">等待二维码</span>
+      </header>
+
+      <section class="task-section">
+        <div class="section-title"><span>1</span>生成独立二维码</div>
+        <div class="qr-row">
+          <div class="qr-preview small-qr">
+            <canvas class="qr-canvas" width="180" height="180" hidden></canvas>
+            <div class="qr-placeholder" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          </div>
+          <div class="qr-copy">
+            <p class="qr-instruction">先为这张图片生成专属二维码。</p>
+            <button class="primary-button generate-qr-button" type="button">生成并下载</button>
+            <div class="qr-actions" hidden>
+              <button class="secondary-button download-qr-button" type="button">再次下载</button>
+              <button class="link-button reset-task-button" type="button">重置</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="task-section final-section">
+        <div class="section-title"><span>2</span>选择带二维码的成品图</div>
+        <input class="final-image-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+        <button class="drop-zone" type="button">
+          <span class="drop-icon" aria-hidden="true">＋</span>
+          <span class="drop-title">选择最终图片</span>
+          <span class="drop-subtitle">PNG、JPG、WebP、GIF，最大 25 MB</span>
+        </button>
+        <div class="image-preview-wrap" hidden>
+          <img class="image-preview" alt="待发布成品图预览">
+          <button class="replace-button" type="button">更换</button>
+        </div>
+      </section>
+
+      <button class="primary-button publish-button" type="button" disabled>加密并发布这张</button>
+      <div class="task-status" role="status" hidden></div>
+      <p class="task-error" role="alert" hidden></p>
+      <button class="link-button download-bin-button" type="button" hidden>下载 .bin 手动上传</button>
+    </article>
+  </template>
 
   <div class="modal-backdrop" id="settings-modal" hidden>
     <section class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
@@ -110,27 +125,15 @@
       <form id="settings-form">
         <label class="field wide-field">
           <span>扫码打开的网址</span>
-          <input id="public-url" type="url" inputmode="url" placeholder="https://用户名.github.io/项目名/" required>
-          <small>可以改成你自己的 HTTPS 域名，但改域名后要重新生成二维码。</small>
+          <input id="public-url" type="url" inputmode="url" placeholder="https://你的域名.com/" required>
+          <small>准备使用自定义域名时，应先完成域名绑定，再生成新的二维码。已生成的任务仍保留原网址。</small>
         </label>
 
         <div class="field-grid">
-          <label class="field">
-            <span>GitHub 用户名</span>
-            <input id="github-owner" autocomplete="username" value="MAlex09YW" required>
-          </label>
-          <label class="field">
-            <span>仓库名</span>
-            <input id="github-repo" value="huituma" required>
-          </label>
-          <label class="field">
-            <span>分支</span>
-            <input id="github-branch" value="main" required>
-          </label>
-          <label class="field">
-            <span>加密文件目录</span>
-            <input id="github-path" value="docs/vault" required>
-          </label>
+          <label class="field"><span>GitHub 用户名</span><input id="github-owner" autocomplete="username" value="MAlex09YW" required></label>
+          <label class="field"><span>仓库名</span><input id="github-repo" value="huituma" required></label>
+          <label class="field"><span>分支</span><input id="github-branch" value="main" required></label>
+          <label class="field"><span>加密文件目录</span><input id="github-path" value="docs/vault" required></label>
         </div>
 
         <label class="field wide-field token-field">
@@ -139,17 +142,14 @@
             <input id="github-token" type="password" autocomplete="off" placeholder="github_pat_...">
             <button class="secondary-button" id="toggle-token-button" type="button">显示</button>
           </span>
-          <small>只授权这个仓库的 Contents: Read and write。Token 只会发给 GitHub API，不会写入二维码或上传文件。</small>
+          <small>只授权当前仓库的 Contents: Read and write。Token 不会写进二维码、备份或加密文件。</small>
         </label>
 
-        <label class="remember-row">
-          <input id="remember-token" type="checkbox">
-          <span>在这台设备上记住 token（仅限你自己的私人设备）</span>
-        </label>
+        <label class="remember-row"><input id="remember-token" type="checkbox"><span>在这台设备上记住 token（仅限私人设备）</span></label>
 
         <div class="settings-help">
           <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">创建 Fine-grained token</a>
-          <span>Repository access 选 Only select repositories → huituma；Permissions 里把 Contents 设为 Read and write。</span>
+          <span>Repository access 只选 huituma；Contents 设为 Read and write。</span>
         </div>
 
         <p class="settings-message" id="settings-message" role="status" hidden></p>
@@ -167,6 +167,6 @@
   </main>
 
   <script src="./vendor/qrcode.js"></script>
-  <script src="./app.js"></script>
+  <script src="./app.js?v=4-migration"></script>
 </body>
 </html>

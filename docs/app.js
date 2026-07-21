@@ -2,20 +2,22 @@
   "use strict";
 
   const SETTINGS_KEY = "huituma:publish-settings:v2";
-  const PROJECT_KEY = "huituma:active-project:v2";
+  const PROJECTS_KEY = "huituma:projects:v3";
+  const LEGACY_PROJECT_KEY = "huituma:active-project:v2";
   const TOKEN_KEY = "huituma:github-token:v2";
+  const CUSTOM_PUBLIC_URL = "https://malex09yw.github.io/huituma/";
+  const MIGRATION_MODE = true;
+  const SLOT_COUNT = 3;
   const MAX_IMAGE_SIZE = 25 * 1024 * 1024;
 
   const params = new URLSearchParams(window.location.search);
   const viewId = params.get("view");
-
   if (viewId) {
     startViewer(viewId);
     return;
   }
 
   const elements = {
-    studio: document.querySelector("#studio"),
     settingsModal: document.querySelector("#settings-modal"),
     openSettingsButton: document.querySelector("#open-settings-button"),
     closeSettingsButton: document.querySelector("#close-settings-button"),
@@ -30,40 +32,73 @@
     githubPath: document.querySelector("#github-path"),
     githubToken: document.querySelector("#github-token"),
     rememberToken: document.querySelector("#remember-token"),
-    qrCanvas: document.querySelector("#qr-canvas"),
-    qrPlaceholder: document.querySelector("#qr-placeholder"),
-    qrInstruction: document.querySelector("#qr-instruction"),
-    projectNote: document.querySelector("#project-note"),
-    generateQrButton: document.querySelector("#generate-qr-button"),
-    qrActions: document.querySelector("#qr-actions"),
-    downloadQrButton: document.querySelector("#download-qr-button"),
-    newProjectButton: document.querySelector("#new-project-button"),
-    finalImageInput: document.querySelector("#final-image-input"),
-    dropZone: document.querySelector("#drop-zone"),
-    dropTitle: document.querySelector("#drop-title"),
-    imagePreviewWrap: document.querySelector("#image-preview-wrap"),
-    imagePreview: document.querySelector("#image-preview"),
-    replaceImageButton: document.querySelector("#replace-image-button"),
-    publishButton: document.querySelector("#publish-button"),
-    publishStatus: document.querySelector("#publish-status"),
-    errorMessage: document.querySelector("#error-message"),
-    downloadBinButton: document.querySelector("#download-bin-button"),
+    taskGrid: document.querySelector("#task-grid"),
+    taskTemplate: document.querySelector("#task-template"),
+    batchSummary: document.querySelector("#batch-summary"),
+    publishAllButton: document.querySelector("#publish-all-button"),
+    exportProjectsButton: document.querySelector("#export-projects-button"),
+    importProjectsButton: document.querySelector("#import-projects-button"),
+    importProjectsInput: document.querySelector("#import-projects-input"),
   };
 
   let settings = loadSettings();
-  let activeProject = loadProject();
   let githubToken = loadToken();
-  let finalImageFile = null;
-  let finalImageUrl = "";
-  let encryptedBlob = null;
+  let projects = loadProjects();
+  let batchPublishing = false;
+  const slots = [];
 
+  createTaskSlots();
   fillSettingsForm();
-  bindEvents();
-  renderProject();
-
+  bindGlobalEvents();
+  renderAllSlots();
+  saveProjects();
   if (!safeStorageGet(localStorage, SETTINGS_KEY)) openSettings();
 
-  function bindEvents() {
+  function createTaskSlots() {
+    for (let index = 0; index < SLOT_COUNT; index += 1) {
+      const fragment = elements.taskTemplate.content.cloneNode(true);
+      const card = fragment.querySelector(".task-card");
+      const slot = {
+        index,
+        project: projects[index],
+        file: null,
+        imageUrl: "",
+        encryptedBlob: null,
+        needsPublish: false,
+        busy: false,
+        elements: {
+          card,
+          taskIndex: fragment.querySelector(".task-index"),
+          taskTitle: fragment.querySelector(".task-title"),
+          badge: fragment.querySelector(".task-badge"),
+          qrCanvas: fragment.querySelector(".qr-canvas"),
+          qrPlaceholder: fragment.querySelector(".qr-placeholder"),
+          qrInstruction: fragment.querySelector(".qr-instruction"),
+          generateQrButton: fragment.querySelector(".generate-qr-button"),
+          qrActions: fragment.querySelector(".qr-actions"),
+          downloadQrButton: fragment.querySelector(".download-qr-button"),
+          resetTaskButton: fragment.querySelector(".reset-task-button"),
+          finalImageInput: fragment.querySelector(".final-image-input"),
+          dropZone: fragment.querySelector(".drop-zone"),
+          dropTitle: fragment.querySelector(".drop-title"),
+          imagePreviewWrap: fragment.querySelector(".image-preview-wrap"),
+          imagePreview: fragment.querySelector(".image-preview"),
+          replaceButton: fragment.querySelector(".replace-button"),
+          publishButton: fragment.querySelector(".publish-button"),
+          status: fragment.querySelector(".task-status"),
+          error: fragment.querySelector(".task-error"),
+          downloadBinButton: fragment.querySelector(".download-bin-button"),
+        },
+      };
+      slot.elements.taskIndex.textContent = String(index + 1);
+      slot.elements.taskTitle.textContent = `图片 ${index + 1}`;
+      bindSlotEvents(slot);
+      slots.push(slot);
+      elements.taskGrid.appendChild(fragment);
+    }
+  }
+
+  function bindGlobalEvents() {
     elements.openSettingsButton.addEventListener("click", openSettings);
     elements.closeSettingsButton.addEventListener("click", closeSettings);
     elements.settingsModal.addEventListener("click", (event) => {
@@ -77,7 +112,7 @@
       event.preventDefault();
       try {
         saveSettingsFromForm();
-        showSettingsMessage("设置已保存。以后制作图片时不用再重复填写。");
+        showSettingsMessage("设置已保存。新生成的二维码将使用这里的网址。");
         window.setTimeout(closeSettings, 650);
       } catch (error) {
         showSettingsMessage(error.message || "设置无法保存。", true);
@@ -89,31 +124,31 @@
       elements.githubToken.type = showing ? "password" : "text";
       elements.toggleTokenButton.textContent = showing ? "显示" : "隐藏";
     });
+    elements.publishAllButton.addEventListener("click", publishAllReady);
+    elements.exportProjectsButton.addEventListener("click", exportProjectBackup);
+    elements.importProjectsButton.addEventListener("click", () => elements.importProjectsInput.click());
+    elements.importProjectsInput.addEventListener("change", () => importProjectBackup(elements.importProjectsInput.files && elements.importProjectsInput.files[0]));
+  }
 
-    elements.generateQrButton.addEventListener("click", generateNewProject);
-    elements.downloadQrButton.addEventListener("click", downloadCurrentQr);
-    elements.newProjectButton.addEventListener("click", () => {
-      const okay = window.confirm("新的二维码会替换当前未完成项目。已经贴进图片的旧二维码将不能用于新项目，确定继续吗？");
-      if (!okay) return;
-      clearProject();
-      generateNewProject();
-    });
-
-    elements.dropZone.addEventListener("click", () => elements.finalImageInput.click());
-    elements.replaceImageButton.addEventListener("click", () => elements.finalImageInput.click());
-    elements.finalImageInput.addEventListener("change", () => acceptFinalImage(elements.finalImageInput.files && elements.finalImageInput.files[0]));
-    elements.dropZone.addEventListener("dragover", (event) => event.preventDefault());
-    elements.dropZone.addEventListener("dragenter", () => elements.dropZone.classList.add("dragging"));
-    elements.dropZone.addEventListener("dragleave", () => elements.dropZone.classList.remove("dragging"));
-    elements.dropZone.addEventListener("drop", (event) => {
+  function bindSlotEvents(slot) {
+    const ui = slot.elements;
+    ui.generateQrButton.addEventListener("click", () => generateProject(slot));
+    ui.downloadQrButton.addEventListener("click", () => downloadQr(slot));
+    ui.resetTaskButton.addEventListener("click", () => resetSlot(slot));
+    ui.dropZone.addEventListener("click", () => ui.finalImageInput.click());
+    ui.replaceButton.addEventListener("click", () => ui.finalImageInput.click());
+    ui.finalImageInput.addEventListener("change", () => acceptImage(slot, ui.finalImageInput.files && ui.finalImageInput.files[0]));
+    ui.dropZone.addEventListener("dragover", (event) => event.preventDefault());
+    ui.dropZone.addEventListener("dragenter", () => ui.dropZone.classList.add("dragging"));
+    ui.dropZone.addEventListener("dragleave", () => ui.dropZone.classList.remove("dragging"));
+    ui.dropZone.addEventListener("drop", (event) => {
       event.preventDefault();
-      elements.dropZone.classList.remove("dragging");
-      acceptFinalImage(event.dataTransfer.files && event.dataTransfer.files[0]);
+      ui.dropZone.classList.remove("dragging");
+      acceptImage(slot, event.dataTransfer.files && event.dataTransfer.files[0]);
     });
-
-    elements.publishButton.addEventListener("click", publishFinalImage);
-    elements.downloadBinButton.addEventListener("click", () => {
-      if (encryptedBlob && activeProject) downloadBlob(encryptedBlob, `${activeProject.id}.bin`);
+    ui.publishButton.addEventListener("click", () => publishSlot(slot, true));
+    ui.downloadBinButton.addEventListener("click", () => {
+      if (slot.encryptedBlob && slot.project) downloadBlob(slot.encryptedBlob, `${slot.project.id}.bin`);
     });
   }
 
@@ -121,7 +156,8 @@
     const url = new URL(window.location.href);
     url.search = "";
     url.hash = "";
-    return normalizeBaseUrl(url.toString());
+    const local = ["localhost", "127.0.0.1"].includes(url.hostname);
+    return local ? normalizeBaseUrl(url.toString()) : CUSTOM_PUBLIC_URL;
   }
 
   function loadSettings() {
@@ -134,20 +170,34 @@
     };
     try {
       const saved = JSON.parse(safeStorageGet(localStorage, SETTINGS_KEY) || "null");
-      return saved ? { ...defaults, ...saved } : defaults;
+      const merged = saved ? { ...defaults, ...saved } : defaults;
+      if (isLegacyPagesUrl(merged.publicUrl)) merged.publicUrl = CUSTOM_PUBLIC_URL;
+      return merged;
     } catch (_error) {
       return defaults;
     }
   }
 
-  function loadProject() {
+  function loadProjects() {
+    const blank = Array.from({ length: SLOT_COUNT }, () => null);
     try {
-      const saved = JSON.parse(safeStorageGet(localStorage, PROJECT_KEY) || "null");
-      if (!saved || !/^[A-Za-z0-9_-]{16}$/.test(saved.id) || !saved.key || !saved.baseUrl) return null;
-      return saved;
-    } catch (_error) {
-      return null;
-    }
+      const saved = JSON.parse(safeStorageGet(localStorage, PROJECTS_KEY) || "null");
+      if (Array.isArray(saved)) {
+        return blank.map((_, index) => validProject(saved[index]) ? saved[index] : null);
+      }
+      const legacy = JSON.parse(safeStorageGet(localStorage, LEGACY_PROJECT_KEY) || "null");
+      if (validProject(legacy)) blank[0] = legacy;
+    } catch (_error) { /* Start with empty slots when saved state is invalid. */ }
+    return blank;
+  }
+
+  function validProject(project) {
+    return Boolean(project && /^[A-Za-z0-9_-]{16}$/.test(project.id) && project.key && project.baseUrl);
+  }
+
+  function saveProjects() {
+    projects = slots.length ? slots.map((slot) => slot.project) : projects;
+    safeStorageSet(localStorage, PROJECTS_KEY, JSON.stringify(projects));
   }
 
   function loadToken() {
@@ -228,196 +278,289 @@
     elements.settingsMessage.hidden = false;
   }
 
-  async function generateNewProject() {
-    hideMessages();
-    if (!window.crypto || !window.crypto.subtle || !window.QRCode) {
-      showError("当前浏览器不支持安全加密或二维码生成，请用最新版 Chrome、Edge 或 Safari 通过 HTTPS 打开。");
+  async function generateProject(slot) {
+    clearMessages(slot);
+    if (MIGRATION_MODE) {
+      showSlotError(slot, "这是任务导出过渡版，请不要生成新二维码。导出任务备份后即可切换到域名正式版。");
       return;
     }
-
+    if (!window.crypto || !window.crypto.subtle || !window.QRCode) {
+      showSlotError(slot, "当前浏览器不支持安全加密或二维码生成，请使用最新版浏览器通过 HTTPS 打开。");
+      return;
+    }
     try {
-      const baseUrl = normalizeBaseUrl(elements.publicUrl.value || settings.publicUrl);
       const rawKey = window.crypto.getRandomValues(new Uint8Array(32));
-      activeProject = {
+      slot.project = {
         id: toBase64Url(window.crypto.getRandomValues(new Uint8Array(12))),
         key: toBase64Url(rawKey),
-        baseUrl,
+        baseUrl: normalizeBaseUrl(settings.publicUrl),
         createdAt: new Date().toISOString(),
       };
-      safeStorageSet(localStorage, PROJECT_KEY, JSON.stringify(activeProject));
-      await renderProject();
-      await downloadCurrentQr();
-      elements.qrInstruction.textContent = "二维码已经下载。请手动把它放进图片，导出后再进行第 2 步。";
+      saveProjects();
+      await renderSlot(slot);
+      await downloadQr(slot);
+      slot.elements.qrInstruction.textContent = "二维码已下载。把它放进图片后，再在下方选择成品图。";
     } catch (error) {
-      showError(error.message || "二维码生成失败，请重试。");
+      showSlotError(slot, error.message || "二维码生成失败，请重试。");
     }
   }
 
-  async function renderProject() {
-    if (!activeProject) {
-      elements.qrCanvas.hidden = true;
-      elements.qrPlaceholder.hidden = false;
-      elements.projectNote.hidden = true;
-      elements.generateQrButton.hidden = false;
-      elements.qrActions.hidden = true;
-      elements.qrInstruction.textContent = "软件会为这张图预留一个随机地址和一把解密钥匙，并立即下载二维码 PNG。";
-      updatePublishButton();
-      return;
-    }
-
-    try {
-      await window.QRCode.toCanvas(elements.qrCanvas, projectUrl(activeProject), qrOptions(560));
-      elements.qrCanvas.hidden = false;
-      elements.qrPlaceholder.hidden = true;
-      elements.projectNote.hidden = false;
-      elements.generateQrButton.hidden = true;
-      elements.qrActions.hidden = false;
-      elements.qrInstruction.textContent = activeProject.publishedAt
-        ? "这组二维码和成品图已经发布。你仍可更换成品图并再次发布。"
-        : "当前项目已保存在本机。请勿为同一张成品图重新生成另一个二维码。";
-    } catch (error) {
-      showError(error.message || "无法恢复当前二维码。");
-    }
-    updatePublishButton();
-  }
-
-  async function downloadCurrentQr() {
-    if (!activeProject) return;
+  async function downloadQr(slot) {
+    if (!slot.project) return;
     const canvas = document.createElement("canvas");
-    await window.QRCode.toCanvas(canvas, projectUrl(activeProject), qrOptions(1200));
-    const blob = await canvasToBlob(canvas);
-    downloadBlob(blob, `二维码-${activeProject.id.slice(0, 8)}.png`);
+    await window.QRCode.toCanvas(canvas, projectUrl(slot.project), qrOptions(1200));
+    downloadBlob(await canvasToBlob(canvas), `二维码-${slot.index + 1}-${slot.project.id.slice(0, 8)}.png`);
   }
 
-  function qrOptions(width) {
-    return {
-      width,
-      margin: 4,
-      errorCorrectionLevel: "H",
-      color: { dark: "#000000", light: "#ffffff" },
-    };
+  function resetSlot(slot) {
+    const published = slot.project && slot.project.publishedAt;
+    const message = published
+      ? "重置只会清空这个任务位，不会删除 GitHub 上已发布的图片。确定继续吗？"
+      : "重置后，已经贴进图片的这个二维码将不能用于新任务。确定继续吗？";
+    if (!window.confirm(message)) return;
+    clearSlotFile(slot);
+    slot.project = null;
+    saveProjects();
+    renderSlot(slot);
   }
 
-  function projectUrl(project) {
-    const url = new URL(project.baseUrl);
-    url.searchParams.set("view", project.id);
-    url.hash = `k=${project.key}`;
-    return url.toString();
-  }
-
-  function clearProject() {
-    activeProject = null;
-    safeStorageRemove(localStorage, PROJECT_KEY);
-    clearFinalImage();
-    renderProject();
-  }
-
-  function acceptFinalImage(file) {
-    hideMessages();
-    encryptedBlob = null;
-    elements.downloadBinButton.hidden = true;
+  function acceptImage(slot, file) {
+    clearMessages(slot);
+    slot.encryptedBlob = null;
+    slot.elements.downloadBinButton.hidden = true;
     if (!file) return;
-    const allowedTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
-    if (!allowedTypes.includes(file.type)) {
-      showError("请选择 PNG、JPG、WebP 或 GIF 图片。");
+    const allowed = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+    if (!allowed.includes(file.type)) {
+      showSlotError(slot, "请选择 PNG、JPG、WebP 或 GIF 图片。");
       return;
     }
     if (file.size > MAX_IMAGE_SIZE) {
-      showError("最终图片不能超过 25 MB，请先压缩后再试。");
+      showSlotError(slot, "最终图片不能超过 25 MB，请先压缩后再试。");
       return;
     }
-
-    clearFinalImage();
-    finalImageFile = file;
-    finalImageUrl = URL.createObjectURL(file);
-    elements.imagePreview.src = finalImageUrl;
-    elements.imagePreviewWrap.hidden = false;
-    elements.dropZone.hidden = true;
-    elements.dropTitle.textContent = file.name;
-    updatePublishButton();
-    if (!activeProject) showError("请先完成第 1 步，生成要放进这张图片的二维码。");
+    clearSlotFile(slot);
+    slot.file = file;
+    slot.needsPublish = true;
+    slot.imageUrl = URL.createObjectURL(file);
+    slot.elements.imagePreview.src = slot.imageUrl;
+    slot.elements.imagePreviewWrap.hidden = false;
+    slot.elements.dropZone.hidden = true;
+    slot.elements.dropTitle.textContent = file.name;
+    if (!slot.project) showSlotError(slot, "请先在这个任务位生成二维码，再选择包含该二维码的成品图。");
+    renderSlotState(slot);
   }
 
-  function clearFinalImage() {
-    if (finalImageUrl) URL.revokeObjectURL(finalImageUrl);
-    finalImageUrl = "";
-    finalImageFile = null;
-    encryptedBlob = null;
-    elements.finalImageInput.value = "";
-    elements.imagePreview.removeAttribute("src");
-    elements.imagePreviewWrap.hidden = true;
-    elements.dropZone.hidden = false;
-    elements.dropTitle.textContent = "选择已经带二维码的最终图片";
-    elements.downloadBinButton.hidden = true;
-    updatePublishButton();
+  function clearSlotFile(slot) {
+    if (slot.imageUrl) URL.revokeObjectURL(slot.imageUrl);
+    slot.imageUrl = "";
+    slot.file = null;
+    slot.needsPublish = false;
+    slot.encryptedBlob = null;
+    slot.elements.finalImageInput.value = "";
+    slot.elements.imagePreview.removeAttribute("src");
+    slot.elements.imagePreviewWrap.hidden = true;
+    slot.elements.dropZone.hidden = false;
+    slot.elements.dropTitle.textContent = "选择最终图片";
+    slot.elements.downloadBinButton.hidden = true;
+    renderSlotState(slot);
   }
 
-  function updatePublishButton() {
-    elements.publishButton.disabled = !(activeProject && finalImageFile);
+  async function renderAllSlots() {
+    await Promise.all(slots.map(renderSlot));
+    updateBatchState();
   }
 
-  async function publishFinalImage() {
-    hideMessages();
-    if (!activeProject || !finalImageFile) {
-      showError("请先生成二维码，并选择带有该二维码的最终图片。");
+  async function renderSlot(slot) {
+    const ui = slot.elements;
+    if (!slot.project) {
+      ui.qrCanvas.hidden = true;
+      ui.qrPlaceholder.hidden = false;
+      ui.generateQrButton.hidden = false;
+      ui.qrActions.hidden = true;
+      ui.qrInstruction.textContent = "先为这张图片生成专属二维码。";
+      renderSlotState(slot);
       return;
     }
-
-    elements.publishButton.disabled = true;
-    elements.publishButton.textContent = "正在本机加密…";
     try {
-      encryptedBlob = await encryptImage(finalImageFile, activeProject.key);
-      elements.downloadBinButton.hidden = false;
-
-      githubToken = loadToken() || githubToken;
-      if (!githubToken) {
-        showError("还没有 GitHub token。请打开“发布设置”完成一次性授权，然后再点发布。");
-        openSettings();
-        return;
-      }
-
-      setPublishStatus("图片已经在本机加密，正在上传加密文件…");
-      elements.publishButton.textContent = "正在上传…";
-      const result = await uploadEncryptedFile(encryptedBlob, activeProject);
-      activeProject.sha = result.sha || activeProject.sha;
-      activeProject.publishedAt = new Date().toISOString();
-      safeStorageSet(localStorage, PROJECT_KEY, JSON.stringify(activeProject));
-
-      elements.downloadBinButton.hidden = true;
-      elements.publishButton.textContent = "等待网站同步…";
-      setPublishStatus("GitHub 已接收加密文件，正在等待 GitHub Pages 更新…");
-      const ready = await waitForPublishedFile(activeProject);
-      if (ready) {
-        setPublishStatus("发布完成。现在扫描图片里的二维码，就会在纯白页面中直接看到这张成品图。");
-      } else {
-        setPublishStatus("上传已成功。GitHub Pages 仍在同步，通常再等 1–2 分钟即可扫描。");
-      }
-      renderProject();
+      await window.QRCode.toCanvas(ui.qrCanvas, projectUrl(slot.project), qrOptions(360));
+      ui.qrCanvas.hidden = false;
+      ui.qrPlaceholder.hidden = true;
+      ui.generateQrButton.hidden = true;
+      ui.qrActions.hidden = false;
+      ui.qrInstruction.textContent = slot.project.publishedAt
+        ? "已发布。可重新选择成品图来更新这个二维码对应的图片。"
+        : "二维码已锁定，请把它放进这张图片。";
     } catch (error) {
-      showError(error.message || "发布失败。你可以重试，或下载 .bin 后手动上传。");
-      elements.downloadBinButton.hidden = !encryptedBlob;
+      showSlotError(slot, error.message || "无法恢复当前二维码。");
+    }
+    renderSlotState(slot);
+  }
+
+  function renderSlotState(slot) {
+    const ui = slot.elements;
+    ui.card.classList.toggle("busy", slot.busy);
+    ui.publishButton.disabled = Boolean(slot.busy || !slot.project || !slot.file || !slot.needsPublish);
+    ui.generateQrButton.disabled = slot.busy;
+    ui.downloadQrButton.disabled = slot.busy;
+    ui.resetTaskButton.disabled = slot.busy;
+    ui.finalImageInput.disabled = slot.busy;
+    ui.badge.className = "task-badge";
+    if (!slot.project) {
+      ui.badge.textContent = "等待二维码";
+    } else if (slot.project.publishedAt && !slot.needsPublish) {
+      ui.badge.textContent = "已发布";
+      ui.badge.classList.add("published");
+    } else if (!slot.file) {
+      ui.badge.textContent = "等待成品图";
+    } else {
+      ui.badge.textContent = slot.project.publishedAt ? "可以更新" : "可以发布";
+      ui.badge.classList.add("ready");
+    }
+    updateBatchState();
+  }
+
+  function updateBatchState() {
+    if (!slots.length) return;
+    const ready = slots.filter((slot) => slot.project && slot.file && slot.needsPublish && !slot.busy).length;
+    const published = slots.filter((slot) => slot.project && slot.project.publishedAt).length;
+    elements.batchSummary.textContent = `${ready} / 3 张已准备${published ? ` · ${published} 张已发布` : ""}`;
+    elements.publishAllButton.disabled = batchPublishing || ready === 0 || slots.some((slot) => slot.busy);
+    elements.exportProjectsButton.disabled = !slots.some((slot) => slot.project) || slots.some((slot) => slot.busy);
+  }
+
+  function exportProjectBackup() {
+    const savedProjects = slots.map((slot) => slot.project).filter(Boolean);
+    if (!savedProjects.length) return;
+    const backup = {
+      format: "huituma-project-backup",
+      version: 1,
+      createdAt: new Date().toISOString(),
+      warning: "本文件包含二维码解密钥匙，请像二维码一样私密保管；不包含 GitHub token。",
+      projects: savedProjects,
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json;charset=utf-8" });
+    downloadBlob(blob, `私密图片任务备份-${new Date().toISOString().slice(0, 10)}.json`);
+  }
+
+  async function importProjectBackup(file) {
+    elements.importProjectsInput.value = "";
+    if (!file) return;
+    try {
+      const backup = JSON.parse(await file.text());
+      if (backup.format !== "huituma-project-backup" || !Array.isArray(backup.projects)) {
+        throw new Error("这不是有效的私密图片任务备份。");
+      }
+      const imported = backup.projects.slice(0, SLOT_COUNT);
+      if (!imported.length || imported.some((project) => !validProject(project))) {
+        throw new Error("任务备份内容不完整或已经损坏。");
+      }
+      if (!window.confirm("导入会替换当前三个任务位，但不会删除已经发布的文件。确定继续吗？")) return;
+      slots.forEach((slot, index) => {
+        clearSlotFile(slot);
+        clearMessages(slot);
+        slot.project = imported[index] || null;
+      });
+      saveProjects();
+      await renderAllSlots();
+    } catch (error) {
+      window.alert(error.message || "任务备份无法导入。");
+    }
+  }
+
+  async function publishAllReady() {
+    const readySlots = slots.filter((slot) => slot.project && slot.file && slot.needsPublish && !slot.busy);
+    if (!readySlots.length) return;
+    githubToken = loadToken() || githubToken;
+    if (!githubToken) {
+      showSlotError(readySlots[0], "请先在“发布设置”中填写 GitHub token。");
+      openSettings();
+      return;
+    }
+
+    batchPublishing = true;
+    elements.publishAllButton.textContent = "正在依次安全发布…";
+    updateBatchState();
+    const uploaded = [];
+    try {
+      for (const slot of readySlots) {
+        if (await publishSlot(slot, false)) uploaded.push(slot);
+      }
+      elements.publishAllButton.textContent = "等待网站同步…";
+      const results = await Promise.all(uploaded.map((slot) => waitForPublishedFile(slot.project)));
+      uploaded.forEach((slot, index) => {
+        setSlotStatus(slot, results[index]
+          ? "发布完成。扫描对应二维码即可查看这张图片。"
+          : "上传成功，GitHub Pages 仍在同步；请稍后再扫描。");
+      });
     } finally {
-      elements.publishButton.disabled = !(activeProject && finalImageFile);
-      elements.publishButton.textContent = "加密并自动发布";
+      batchPublishing = false;
+      elements.publishAllButton.textContent = "发布全部已准备图片";
+      updateBatchState();
+    }
+  }
+
+  async function publishSlot(slot, waitForPages) {
+    clearMessages(slot);
+    if (!slot.project || !slot.file || !slot.needsPublish) {
+      showSlotError(slot, "请先生成二维码，并选择包含该二维码的最终图片。");
+      return false;
+    }
+    githubToken = loadToken() || githubToken;
+    if (!githubToken) {
+      showSlotError(slot, "还没有 GitHub token。请先完成发布设置。");
+      openSettings();
+      return false;
+    }
+
+    slot.busy = true;
+    slot.elements.publishButton.textContent = "正在本机加密…";
+    renderSlotState(slot);
+    try {
+      slot.encryptedBlob = await encryptImage(slot.file, slot.project.key);
+      slot.elements.downloadBinButton.hidden = false;
+      setSlotStatus(slot, "加密完成，正在上传加密文件…");
+      slot.elements.publishButton.textContent = "正在上传…";
+      const result = await uploadEncryptedFile(slot.encryptedBlob, slot.project);
+      slot.project.sha = result.sha || slot.project.sha;
+      slot.project.publishedAt = new Date().toISOString();
+      slot.needsPublish = false;
+      saveProjects();
+      slot.elements.downloadBinButton.hidden = true;
+
+      if (waitForPages) {
+        slot.elements.publishButton.textContent = "等待网站同步…";
+        setSlotStatus(slot, "GitHub 已接收，正在等待 GitHub Pages 更新…");
+        const ready = await waitForPublishedFile(slot.project);
+        setSlotStatus(slot, ready
+          ? "发布完成。扫描对应二维码即可查看这张图片。"
+          : "上传成功，GitHub Pages 仍在同步；通常再等 1–2 分钟即可。");
+      } else {
+        setSlotStatus(slot, "加密文件已上传，等待本批次全部完成。 ");
+      }
+      renderSlot(slot);
+      return true;
+    } catch (error) {
+      showSlotError(slot, error.message || "发布失败。可以重试，或下载 .bin 手动上传。");
+      slot.elements.downloadBinButton.hidden = !slot.encryptedBlob;
+      return false;
+    } finally {
+      slot.busy = false;
+      slot.elements.publishButton.textContent = "加密并发布这张";
+      renderSlotState(slot);
     }
   }
 
   async function encryptImage(file, keyText) {
     if (!window.crypto || !window.crypto.subtle) throw new Error("当前浏览器不支持安全加密。");
     const rawKey = fromBase64Url(keyText);
-    if (rawKey.length !== 32) throw new Error("当前项目的解密钥匙无效，请重新生成二维码。");
-
-    const mimeText = file.type || "image/png";
-    const mime = new TextEncoder().encode(mimeText);
+    if (rawKey.length !== 32) throw new Error("当前任务的解密钥匙无效，请重新生成二维码。");
+    const mime = new TextEncoder().encode(file.type || "image/png");
     if (mime.length > 255) throw new Error("图片类型信息异常。");
     const iv = window.crypto.getRandomValues(new Uint8Array(12));
     const key = await window.crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["encrypt"]);
     const ciphertext = new Uint8Array(await window.crypto.subtle.encrypt(
-      { name: "AES-GCM", iv },
-      key,
-      await file.arrayBuffer(),
+      { name: "AES-GCM", iv }, key, await file.arrayBuffer(),
     ));
-
     const sealed = new Uint8Array(17 + mime.length + ciphertext.length);
     sealed.set([0x48, 0x54, 0x4d, 0x32], 0);
     sealed.set(iv, 4);
@@ -436,14 +579,13 @@
       branch: settings.branch,
     };
     if (project.sha) body.sha = project.sha;
-
     let response = await githubPut(apiUrl, body);
     if (response.status === 422 && !body.sha) {
       const existing = await fetch(apiUrl, { headers: githubHeaders(githubToken), cache: "no-store" });
       if (existing.ok) {
-        const existingFile = await existing.json();
-        if (existingFile.sha) {
-          body.sha = existingFile.sha;
+        const file = await existing.json();
+        if (file.sha) {
+          body.sha = file.sha;
           response = await githubPut(apiUrl, body);
         }
       }
@@ -476,14 +618,11 @@
 
   async function githubError(response) {
     let detail = "";
-    try {
-      const data = await response.json();
-      detail = data.message || "";
-    } catch (_error) { /* Ignore invalid JSON error pages. */ }
-    if (response.status === 401) return "GitHub 拒绝了 token，请检查 token 是否正确或是否已经过期。";
-    if (response.status === 403) return "token 没有写入权限。请把所选仓库的 Contents 权限设为 Read and write。";
-    if (response.status === 404) return "找不到仓库。请检查用户名、仓库名，以及 token 是否授权了这个仓库。";
-    if (response.status === 409) return "GitHub 暂时无法写入该分支，请稍后重试。";
+    try { detail = (await response.json()).message || ""; } catch (_error) { /* Ignore invalid error bodies. */ }
+    if (response.status === 401) return "GitHub 拒绝了 token，请检查 token 是否正确或已经过期。";
+    if (response.status === 403) return "token 没有写入权限，请把 Contents 设为 Read and write。";
+    if (response.status === 404) return "找不到仓库，请检查用户名、仓库名和 token 授权范围。";
+    if (response.status === 409) return "GitHub 分支正在更新，请稍后重试。";
     if (response.status === 422) return `GitHub 无法保存文件${detail ? `：${detail}` : ""}`;
     return `GitHub 请求失败（HTTP ${response.status}）${detail ? `：${detail}` : ""}`;
   }
@@ -501,30 +640,40 @@
     return false;
   }
 
-  function setPublishStatus(message) {
-    elements.publishStatus.textContent = message;
-    elements.publishStatus.hidden = false;
+  function setSlotStatus(slot, message) {
+    slot.elements.status.textContent = message;
+    slot.elements.status.hidden = false;
+    slot.elements.error.hidden = true;
   }
 
-  function showError(message) {
-    elements.errorMessage.textContent = message;
-    elements.errorMessage.hidden = false;
+  function showSlotError(slot, message) {
+    slot.elements.error.textContent = message;
+    slot.elements.error.hidden = false;
+    slot.elements.status.hidden = true;
   }
 
-  function hideMessages() {
-    elements.errorMessage.hidden = true;
-    elements.errorMessage.textContent = "";
-    elements.publishStatus.hidden = true;
-    elements.publishStatus.textContent = "";
+  function clearMessages(slot) {
+    slot.elements.error.hidden = true;
+    slot.elements.error.textContent = "";
+    slot.elements.status.hidden = true;
+    slot.elements.status.textContent = "";
+  }
+
+  function projectUrl(project) {
+    const url = new URL(project.baseUrl);
+    url.searchParams.set("view", project.id);
+    url.hash = `k=${project.key}`;
+    return url.toString();
+  }
+
+  function qrOptions(width) {
+    return { width, margin: 4, errorCorrectionLevel: "H", color: { dark: "#000000", light: "#ffffff" } };
   }
 
   function normalizeBaseUrl(value) {
     let url;
-    try {
-      url = new URL(String(value || "").trim());
-    } catch (_error) {
-      throw new Error("请输入完整网址，例如 https://malex09yw.github.io/huituma/");
-    }
+    try { url = new URL(String(value || "").trim()); }
+    catch (_error) { throw new Error("请输入完整网址，例如 https://你的域名.com/"); }
     const local = ["localhost", "127.0.0.1"].includes(url.hostname);
     if (url.protocol !== "https:" && !(local && url.protocol === "http:")) {
       throw new Error("正式二维码必须使用 HTTPS 网址；HTTP 只允许本机测试。");
@@ -533,6 +682,15 @@
     url.hash = "";
     if (!url.pathname.endsWith("/")) url.pathname += "/";
     return url.toString();
+  }
+
+  function isLegacyPagesUrl(value) {
+    try {
+      const url = new URL(value);
+      return url.hostname.toLowerCase() === "malex09yw.github.io" && /^\/huituma\/?$/i.test(url.pathname);
+    } catch (_error) {
+      return false;
+    }
   }
 
   function cleanName(value, label) {
@@ -552,9 +710,8 @@
   function arrayBufferToBase64(buffer) {
     const bytes = new Uint8Array(buffer);
     const chunks = [];
-    const chunkSize = 0x8000;
-    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-      chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + chunkSize)));
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+      chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + 0x8000)));
     }
     return btoa(chunks.join(""));
   }
@@ -607,9 +764,8 @@
   async function startViewer(fileId) {
     const studio = document.querySelector("#studio");
     const viewer = document.querySelector("#viewer");
-    const viewerImage = document.querySelector("#viewer-image");
-    const viewerError = document.querySelector("#viewer-error");
-
+    const image = document.querySelector("#viewer-image");
+    const errorText = document.querySelector("#viewer-error");
     document.title = "";
     document.body.classList.add("viewer-active");
     studio.hidden = true;
@@ -618,7 +774,6 @@
     try {
       if (!window.crypto || !window.crypto.subtle) throw new Error("当前浏览器无法安全打开这张图片。");
       if (!/^[A-Za-z0-9_-]{16}$/.test(fileId)) throw new Error("二维码中的图片编号无效。");
-
       const fragment = new URLSearchParams(window.location.hash.slice(1));
       let keyText = fragment.get("k") || "";
       const sessionKey = `huituma:image-key:${fileId}`;
@@ -629,12 +784,18 @@
         keyText = safeStorageGet(sessionStorage, sessionKey);
       }
       if (!keyText) throw new Error("缺少解密钥匙，请重新扫描原二维码。");
-
       const rawKey = fromBase64Url(keyText);
       if (rawKey.length !== 32) throw new Error("二维码中的解密钥匙无效。");
-      const response = await fetch(`./vault/${encodeURIComponent(fileId)}.bin`, { cache: "no-store" });
-      if (!response.ok) throw new Error("图片尚未发布，或已经被发布者删除。");
 
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 20000);
+      let response;
+      try {
+        response = await fetch(`./vault/${encodeURIComponent(fileId)}.bin`, { cache: "no-store", signal: controller.signal });
+      } finally {
+        window.clearTimeout(timeout);
+      }
+      if (!response.ok) throw new Error("图片尚未发布，或已经被发布者删除。");
       const sealed = new Uint8Array(await response.arrayBuffer());
       if (sealed.length < 33 || sealed[0] !== 0x48 || sealed[1] !== 0x54 || sealed[2] !== 0x4d) {
         throw new Error("图片文件格式不正确。");
@@ -648,11 +809,11 @@
         ciphertext = sealed.slice(16);
       } else if (version === 0x32) {
         const mimeLength = sealed[16];
-        const dataStart = 17 + mimeLength;
-        if (!mimeLength || sealed.length <= dataStart + 16) throw new Error("图片文件格式不正确。");
-        mimeType = new TextDecoder().decode(sealed.slice(17, dataStart));
+        const start = 17 + mimeLength;
+        if (!mimeLength || sealed.length <= start + 16) throw new Error("图片文件格式不正确。");
+        mimeType = new TextDecoder().decode(sealed.slice(17, start));
         if (!mimeType.startsWith("image/")) throw new Error("图片类型不正确。");
-        ciphertext = sealed.slice(dataStart);
+        ciphertext = sealed.slice(start);
       } else {
         throw new Error("图片文件版本不受支持。");
       }
@@ -660,16 +821,17 @@
       const key = await window.crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["decrypt"]);
       const plaintext = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
       const imageUrl = URL.createObjectURL(new Blob([plaintext], { type: mimeType }));
-      viewerImage.addEventListener("error", () => {
-        viewerImage.hidden = true;
-        viewerError.textContent = "图片无法显示。";
-        viewerError.hidden = false;
-      }, { once: true });
-      viewerImage.src = imageUrl;
-      viewerImage.hidden = false;
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = () => reject(new Error("图片无法显示。"));
+        image.src = imageUrl;
+      });
+      image.hidden = false;
     } catch (error) {
-      viewerError.textContent = error.message || "无法打开图片。";
-      viewerError.hidden = false;
+      errorText.textContent = error.name === "AbortError"
+        ? "网络超时，请检查连接后重新扫描。"
+        : (error.message || "无法打开图片。");
+      errorText.hidden = false;
     }
   }
 })();
