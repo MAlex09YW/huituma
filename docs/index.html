@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17211f">
+  <meta name="description" content="免费制作只有持有二维码的人才能解密查看的图片。">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="回图码｜让图片找到自己">
+  <meta property="og:description" content="图片先加密，只有持有二维码的人才能在浏览器中还原查看。">
+  <meta property="og:image" content="./og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <title>回图码｜给图片加上能找回自己的二维码</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="studio-shell" id="studio">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">回</span>回图码</div>
+      <div class="privacy-note"><span class="privacy-dot"></span>公开空间只保存加密文件</div>
+    </header>
+
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">免费 · 持码可见</p>
+        <h1 id="page-title">让图片<br>找到自己</h1>
+        <p class="hero-copy">图片先在本机加密，解密钥匙只写进二维码。GitHub 上保存的是无法直接打开的加密文件，持有二维码的人才能还原图片。</p>
+      </div>
+      <div class="hero-steps" aria-label="制作步骤">
+        <div class="mini-step"><strong>01</strong><span>确认网址</span></div>
+        <div class="mini-step"><strong>02</strong><span>写入密钥</span></div>
+        <div class="mini-step"><strong>03</strong><span>加密发布</span></div>
+      </div>
+    </section>
+
+    <section class="workbench" aria-label="二维码图片制作工具">
+      <div class="controls">
+        <label class="section-label" for="public-url"><span class="number">1</span>GitHub Pages 网址</label>
+        <input class="url-input" id="public-url" inputmode="url" aria-describedby="url-hint" placeholder="https://用户名.github.io/项目名/">
+        <p class="field-hint" id="url-hint">解密钥匙会放在网址的 # 后面，不会发送给 GitHub。</p>
+
+        <div class="section-label"><span class="number">2</span>选择图片</div>
+        <input id="file-input" type="file" accept="image/*" hidden>
+        <button class="upload-box" id="upload-box" type="button">
+          <span class="upload-icon">＋</span>
+          <span class="upload-title" id="upload-title">点击或拖入一张图片</span>
+          <span class="upload-subtitle">JPG、PNG、WebP，最大 30 MB</span>
+        </button>
+
+        <div class="section-label"><span class="number">3</span>二维码样式</div>
+        <div class="position-row" aria-label="二维码位置">
+          <button class="position-button" type="button" data-position="top-left" title="左上" aria-label="二维码放在左上">↖</button>
+          <button class="position-button" type="button" data-position="top-right" title="右上" aria-label="二维码放在右上">↗</button>
+          <button class="position-button" type="button" data-position="bottom-left" title="左下" aria-label="二维码放在左下">↙</button>
+          <button class="position-button active" type="button" data-position="bottom-right" title="右下" aria-label="二维码放在右下" aria-pressed="true">↘</button>
+        </div>
+        <div class="range-header"><span>二维码大小</span><output id="size-output">22%</output></div>
+        <input class="size-range" id="size-range" type="range" min="16" max="34" value="22" aria-label="二维码大小">
+
+        <button class="action-button" id="generate-button" type="button" disabled>生成加密二维码图片</button>
+        <p class="error-message" id="error-message" role="alert" hidden></p>
+      </div>
+
+      <div class="preview-panel" aria-live="polite">
+        <div class="preview-empty" id="preview-empty">
+          <div class="preview-symbol">▦</div>
+          <h2>成品会出现在这里</h2>
+          <p>原图和解密后的图片都不会自动上传。公开空间最终只保存无法直接查看的加密文件。</p>
+        </div>
+        <div class="preview-result" id="preview-result" hidden>
+          <div class="preview-stage"><img id="preview-image" alt="图片预览"></div>
+          <div class="preview-footer">
+            <span id="preview-caption">这是原图预览，点击左侧按钮生成加密二维码。</span>
+            <span class="download-group">
+              <button class="download-button" id="download-image-button" type="button" hidden>下载含二维码图片</button>
+              <button class="download-button secondary" id="download-encrypted-button" type="button" hidden>下载加密发布文件</button>
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="publish-guide">
+      <span><strong>隐私关键：</strong>只把随机编号的 <b>.bin 加密文件</b>上传到项目的 docs/vault 文件夹。含二维码的 PNG 只用于你自己发送、展示或打印，绝不能上传到公开仓库。</span>
+      <span class="file-name" id="publish-file-name">docs/vault/随机编号.bin</span>
+    </aside>
+  </main>
+
+  <main class="viewer" id="viewer" hidden>
+    <img class="viewer-image" id="viewer-image" alt="通过二维码解密后的图片" hidden>
+    <div class="viewer-missing" id="viewer-status">
+      <strong id="viewer-status-title">正在读取二维码</strong>
+      <p id="viewer-status-text">正在获取并解密图片。</p>
+      <a class="viewer-link" href="./">返回制作页</a>
+    </div>
+    <nav class="viewer-tools" id="viewer-tools" aria-label="图片操作" hidden>
+      <a class="viewer-link" id="viewer-download" href="#" download>保存图片</a>
+      <a class="viewer-link" href="./">制作新图</a>
+    </nav>
+  </main>
+
+  <script src="./vendor/qrcode.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
