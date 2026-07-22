@@ -5,8 +5,7 @@
   const PROJECTS_KEY = "huituma:projects:v3";
   const LEGACY_PROJECT_KEY = "huituma:active-project:v2";
   const TOKEN_KEY = "huituma:github-token:v2";
-  const CUSTOM_PUBLIC_URL = "https://malex09yw.github.io/huituma/";
-  const MIGRATION_MODE = true;
+  const CUSTOM_PUBLIC_URL = "https://www.henanshebaogov.com/";
   const SLOT_COUNT = 3;
   const MAX_IMAGE_SIZE = 25 * 1024 * 1024;
 
@@ -280,10 +279,6 @@
 
   async function generateProject(slot) {
     clearMessages(slot);
-    if (MIGRATION_MODE) {
-      showSlotError(slot, "这是任务导出过渡版，请不要生成新二维码。导出任务备份后即可切换到域名正式版。");
-      return;
-    }
     if (!window.crypto || !window.crypto.subtle || !window.QRCode) {
       showSlotError(slot, "当前浏览器不支持安全加密或二维码生成，请使用最新版浏览器通过 HTTPS 打开。");
       return;

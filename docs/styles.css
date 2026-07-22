@@ -73,21 +73,6 @@ button { -webkit-tap-highlight-color: transparent; }
   font-size: 13px;
   font-weight: 700;
 }
-.migration-banner {
-  margin-top: 22px;
-  padding: 15px 18px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  color: #74422f;
-  border: 1px solid #e5c7b9;
-  border-radius: 14px;
-  background: #fff3ed;
-  font-size: 12px;
-  line-height: 1.6;
-}
-.migration-banner strong { white-space: nowrap; }
-.migration-banner span { color: #80665b; }
 
 .hero {
   padding: clamp(70px, 9vw, 118px) 0 clamp(44px, 6vw, 72px);
@@ -389,7 +374,6 @@ body.viewer-active { background: white; }
 @media (max-width: 560px) {
   .studio { width: min(100% - 24px, 1380px); padding-top: 16px; }
   .hero { padding: 66px 6px 42px; }
-  .migration-banner { align-items: flex-start; flex-direction: column; gap: 4px; }
   .hero-copy { font-size: 14px; }
   .batch-toolbar { align-items: stretch; flex-direction: column; }
   .toolbar-actions { align-items: stretch; flex-direction: column; }
