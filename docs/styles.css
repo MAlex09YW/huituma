@@ -22,24 +22,22 @@ body {
 
 .verification-image-frame {
   width: 100%;
-  aspect-ratio: 818 / 419;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  border: 1px solid #cccccc;
+  display: block;
+  overflow: visible;
+  border: 0;
   background: #ffffff;
 }
 
 .verification-image {
   width: 100%;
-  height: 100%;
+  height: auto;
   display: block;
   object-fit: contain;
 }
 
 .verification-fields {
   width: min(753px, calc(100% - 68px));
-  margin: 32px auto 0;
+  margin: clamp(64px, 8vw, 96px) auto 0;
   display: grid;
   gap: 32px;
 }
@@ -153,7 +151,7 @@ body {
 
   .verification-fields {
     width: calc(100% - 20px);
-    margin-top: 18px;
+    margin-top: 44px;
     gap: 18px;
   }
 
