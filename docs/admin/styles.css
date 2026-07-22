@@ -293,6 +293,41 @@ h1 {
 .qr-actions { display: flex; align-items: center; gap: 10px; }
 .qr-actions .secondary-button { flex: 1; padding: 0 10px; font-size: 11px; }
 .reset-task-button { color: var(--accent-dark); font-size: 11px; }
+.form-code-copy-row {
+  margin-top: 16px;
+  display: grid;
+  gap: 7px;
+}
+.form-code-copy-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+.form-code-copy-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+}
+.form-code-copy-input {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  padding: 0 10px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  outline: 0;
+  background: #ffffff;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+}
+.form-code-copy-input:focus { border-color: var(--green); }
+.form-code-copy-button {
+  min-width: 58px;
+  min-height: 42px;
+  padding-inline: 12px;
+  font-size: 11px;
+}
 
 .final-section { flex: 1; }
 .drop-zone {

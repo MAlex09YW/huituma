@@ -82,6 +82,9 @@
           qrActions: fragment.querySelector(".qr-actions"),
           downloadQrButton: fragment.querySelector(".download-qr-button"),
           resetTaskButton: fragment.querySelector(".reset-task-button"),
+          formCodeRow: fragment.querySelector(".form-code-copy-row"),
+          formCodeInput: fragment.querySelector(".form-code-copy-input"),
+          formCodeCopyButton: fragment.querySelector(".form-code-copy-button"),
           finalImageInput: fragment.querySelector(".final-image-input"),
           dropZone: fragment.querySelector(".final-section .drop-zone"),
           dropTitle: fragment.querySelector(".final-section .drop-title"),
@@ -142,6 +145,8 @@
     ui.generateQrButton.addEventListener("click", () => generateProject(slot));
     ui.downloadQrButton.addEventListener("click", () => downloadQr(slot));
     ui.resetTaskButton.addEventListener("click", () => resetSlot(slot));
+    ui.formCodeInput.addEventListener("click", () => ui.formCodeInput.select());
+    ui.formCodeCopyButton.addEventListener("click", () => copyFormCode(slot));
     ui.dropZone.addEventListener("click", () => ui.finalImageInput.click());
     ui.replaceButton.addEventListener("click", () => ui.finalImageInput.click());
     ui.finalImageInput.addEventListener("change", () => acceptImage(slot, ui.finalImageInput.files && ui.finalImageInput.files[0]));
@@ -496,6 +501,20 @@
     downloadBlob(await canvasToBlob(canvas), `二维码-${slot.index + 1}-${slot.project.id.slice(0, 8)}.png`);
   }
 
+  async function copyFormCode(slot) {
+    if (!slot.project || !slot.project.formCode) return;
+    const ui = slot.elements;
+    try {
+      await navigator.clipboard.writeText(slot.project.formCode);
+    } catch (_error) {
+      ui.formCodeInput.focus();
+      ui.formCodeInput.select();
+      document.execCommand("copy");
+    }
+    ui.formCodeCopyButton.textContent = "已复制";
+    window.setTimeout(() => { ui.formCodeCopyButton.textContent = "复制"; }, 1200);
+  }
+
   function resetSlot(slot) {
     const published = slot.project && slot.project.publishedAt;
     const message = published
@@ -562,6 +581,8 @@
       ui.generateQrButton.hidden = false;
       ui.qrActions.hidden = true;
       ui.qrInstruction.textContent = "先为这张图片生成专属二维码。";
+      ui.formCodeRow.hidden = true;
+      ui.formCodeInput.value = "";
       renderSlotState(slot);
       return;
     }
@@ -571,6 +592,9 @@
       ui.qrPlaceholder.hidden = true;
       ui.generateQrButton.hidden = true;
       ui.qrActions.hidden = false;
+      const hasFormCode = /^[a-f0-9]{32}$/.test(slot.project.formCode || "");
+      ui.formCodeRow.hidden = !hasFormCode;
+      ui.formCodeInput.value = hasFormCode ? slot.project.formCode : "";
       ui.qrInstruction.textContent = slot.project.publishedAt
         ? "已发布。可重新选择成品图来更新这个二维码对应的图片。"
         : "二维码已锁定，请把它放进这张图片。";
@@ -588,6 +612,7 @@
     ui.generateQrButton.disabled = slot.busy;
     ui.downloadQrButton.disabled = slot.busy;
     ui.resetTaskButton.disabled = slot.busy;
+    ui.formCodeCopyButton.disabled = slot.busy;
     ui.finalImageInput.disabled = slot.busy;
     ui.badge.className = "task-badge";
     if (!slot.project) {
