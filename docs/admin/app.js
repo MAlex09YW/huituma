@@ -31,12 +31,23 @@
     exportProjectsButton: document.querySelector("#export-projects-button"),
     importProjectsButton: document.querySelector("#import-projects-button"),
     importProjectsInput: document.querySelector("#import-projects-input"),
+    fixedImageInput: document.querySelector("#fixed-image-input"),
+    fixedImageSelectButton: document.querySelector("#fixed-image-select-button"),
+    fixedImagePublishButton: document.querySelector("#fixed-image-publish-button"),
+    fixedImagePreviewWrap: document.querySelector("#fixed-image-preview-wrap"),
+    fixedImagePreview: document.querySelector("#fixed-image-preview"),
+    fixedImagePlaceholder: document.querySelector("#fixed-image-placeholder"),
+    fixedImageStatus: document.querySelector("#fixed-image-status"),
+    fixedImageError: document.querySelector("#fixed-image-error"),
   };
 
   let settings = loadSettings();
   let githubToken = loadToken();
   let projects = loadProjects();
   let batchPublishing = false;
+  let fixedImageFile = null;
+  let fixedImageUrl = "";
+  let fixedImageBusy = false;
   const slots = [];
 
   createTaskSlots();
@@ -44,6 +55,7 @@
   bindGlobalEvents();
   renderAllSlots();
   saveProjects();
+  loadCurrentFixedImage();
   if (!safeStorageGet(localStorage, SETTINGS_KEY)) openSettings();
 
   function createTaskSlots() {
@@ -71,11 +83,11 @@
           downloadQrButton: fragment.querySelector(".download-qr-button"),
           resetTaskButton: fragment.querySelector(".reset-task-button"),
           finalImageInput: fragment.querySelector(".final-image-input"),
-          dropZone: fragment.querySelector(".drop-zone"),
-          dropTitle: fragment.querySelector(".drop-title"),
-          imagePreviewWrap: fragment.querySelector(".image-preview-wrap"),
-          imagePreview: fragment.querySelector(".image-preview"),
-          replaceButton: fragment.querySelector(".replace-button"),
+          dropZone: fragment.querySelector(".final-section .drop-zone"),
+          dropTitle: fragment.querySelector(".final-section .drop-title"),
+          imagePreviewWrap: fragment.querySelector(".final-section .image-preview-wrap"),
+          imagePreview: fragment.querySelector(".final-section .image-preview"),
+          replaceButton: fragment.querySelector(".final-section .replace-button"),
           publishButton: fragment.querySelector(".publish-button"),
           status: fragment.querySelector(".task-status"),
           error: fragment.querySelector(".task-error"),
@@ -120,6 +132,9 @@
     elements.exportProjectsButton.addEventListener("click", exportProjectBackup);
     elements.importProjectsButton.addEventListener("click", () => elements.importProjectsInput.click());
     elements.importProjectsInput.addEventListener("change", () => importProjectBackup(elements.importProjectsInput.files && elements.importProjectsInput.files[0]));
+    elements.fixedImageSelectButton.addEventListener("click", () => elements.fixedImageInput.click());
+    elements.fixedImageInput.addEventListener("change", () => acceptFixedImage(elements.fixedImageInput.files && elements.fixedImageInput.files[0]));
+    elements.fixedImagePublishButton.addEventListener("click", publishFixedImage);
   }
 
   function bindSlotEvents(slot) {
@@ -184,7 +199,13 @@
   }
 
   function validProject(project) {
-    return Boolean(project && /^[A-Za-z0-9_-]{16}$/.test(project.id) && project.key && project.baseUrl);
+    return Boolean(
+      project
+      && /^[A-Za-z0-9_-]{16}$/.test(project.id)
+      && project.key
+      && project.baseUrl
+      && (project.formCode === undefined || /^[a-f0-9]{32}$/.test(project.formCode)),
+    );
   }
 
   function saveProjects() {
@@ -270,6 +291,178 @@
     elements.settingsMessage.hidden = false;
   }
 
+  function acceptFixedImage(file) {
+    clearFixedImageMessages();
+    if (!file) return;
+    const allowed = ["image/png", "image/jpeg", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      showFixedImageError("请选择 PNG、JPG 或 WebP 图片。");
+      return;
+    }
+    if (file.size > MAX_IMAGE_SIZE) {
+      showFixedImageError("固定顶部图片不能超过 25 MB，请先压缩后再试。");
+      return;
+    }
+    if (fixedImageUrl) URL.revokeObjectURL(fixedImageUrl);
+    fixedImageFile = file;
+    fixedImageUrl = URL.createObjectURL(file);
+    elements.fixedImagePreview.src = fixedImageUrl;
+    elements.fixedImagePreview.hidden = false;
+    elements.fixedImagePlaceholder.hidden = true;
+    elements.fixedImagePublishButton.disabled = false;
+    elements.fixedImageSelectButton.textContent = "重新选择";
+  }
+
+  async function publishFixedImage() {
+    clearFixedImageMessages();
+    if (!fixedImageFile || fixedImageBusy) return;
+    githubToken = loadToken() || githubToken;
+    if (!githubToken) {
+      showFixedImageError("还没有 GitHub token。请先完成发布设置。");
+      openSettings();
+      return;
+    }
+    fixedImageBusy = true;
+    elements.fixedImageInput.disabled = true;
+    elements.fixedImageSelectButton.disabled = true;
+    elements.fixedImagePublishButton.disabled = true;
+    elements.fixedImagePublishButton.textContent = "正在处理…";
+    try {
+      const pngBlob = await convertToPng(fixedImageFile);
+      const digest = new Uint8Array(await window.crypto.subtle.digest("SHA-256", await pngBlob.arrayBuffer()));
+      const fileName = `verification-header-${toHex(digest.slice(0, 12))}.png`;
+      const rootPath = settings.path.split("/").slice(0, -1).join("/");
+      const imagePath = [rootPath, fileName].filter(Boolean).join("/");
+      const configPath = [rootPath, "verification-header.json"].filter(Boolean).join("/");
+      elements.fixedImagePublishButton.textContent = "正在上传图片…";
+      await uploadRepoFile(pngBlob, imagePath, "Update fixed verification header image", true);
+      const configBlob = new Blob([JSON.stringify({ file: fileName })], { type: "application/json" });
+      elements.fixedImagePublishButton.textContent = "正在启用…";
+      await uploadRepoFile(configBlob, configPath, "Activate fixed verification header image", false);
+      setFixedImageStatus("上传成功，正在等待网站同步…");
+      const ready = await waitForFixedImage(fileName);
+      setFixedImageStatus(ready
+        ? "固定图片已经生效。所有二维码的验证页都会显示这张图。"
+        : "文件已上传，网站仍在同步；通常再等 1–2 分钟即可生效。");
+      fixedImageFile = null;
+    } catch (error) {
+      showFixedImageError(error.message || "固定图片上传失败，请重试。");
+    } finally {
+      fixedImageBusy = false;
+      elements.fixedImageInput.disabled = false;
+      elements.fixedImageSelectButton.disabled = false;
+      elements.fixedImagePublishButton.disabled = !fixedImageFile;
+      elements.fixedImagePublishButton.textContent = "上传并设为固定图片";
+    }
+  }
+
+  async function loadCurrentFixedImage() {
+    try {
+      const configUrl = new URL("verification-header.json", settings.publicUrl);
+      configUrl.searchParams.set("_", Date.now());
+      const response = await fetch(configUrl.toString(), { cache: "no-store" });
+      if (!response.ok) return;
+      const config = await response.json();
+      if (!config || !/^verification-header-[a-f0-9]{24}\.png$/.test(config.file)) return;
+      const imageUrl = new URL(config.file, settings.publicUrl).toString();
+      elements.fixedImagePreview.onload = () => {
+        elements.fixedImagePreview.hidden = false;
+        elements.fixedImagePlaceholder.hidden = true;
+      };
+      elements.fixedImagePreview.src = imageUrl;
+      setFixedImageStatus("网站当前已有固定验证页图片；重新上传即可替换。");
+    } catch (_error) { /* A missing fixed image is valid before first setup. */ }
+  }
+
+  function convertToPng(file) {
+    if (file.type === "image/png") return Promise.resolve(file);
+    return new Promise((resolve, reject) => {
+      const imageUrl = URL.createObjectURL(file);
+      const image = new Image();
+      image.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = image.naturalWidth;
+          canvas.height = image.naturalHeight;
+          const context = canvas.getContext("2d");
+          context.drawImage(image, 0, 0);
+          canvas.toBlob((blob) => {
+            URL.revokeObjectURL(imageUrl);
+            if (blob) resolve(blob);
+            else reject(new Error("图片无法转换为 PNG。"));
+          }, "image/png");
+        } catch (error) {
+          URL.revokeObjectURL(imageUrl);
+          reject(error);
+        }
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(imageUrl);
+        reject(new Error("选择的图片无法读取。"));
+      };
+      image.src = imageUrl;
+    });
+  }
+
+  async function uploadRepoFile(blob, filePath, message, skipIfExists) {
+    const apiUrl = githubContentsUrl(settings, filePath);
+    const existingResponse = await fetch(apiUrl, { headers: githubHeaders(githubToken), cache: "no-store" });
+    let existingSha = "";
+    if (existingResponse.ok) {
+      const existing = await existingResponse.json();
+      if (skipIfExists) return existing;
+      existingSha = existing.sha || "";
+    } else if (existingResponse.status !== 404) {
+      throw new Error(await githubError(existingResponse));
+    }
+    const body = {
+      message,
+      content: arrayBufferToBase64(await blob.arrayBuffer()),
+      branch: settings.branch,
+    };
+    if (existingSha) body.sha = existingSha;
+    const response = await githubPut(apiUrl, body);
+    if (!response.ok) throw new Error(await githubError(response));
+    const data = await response.json();
+    return data.content || {};
+  }
+
+  async function waitForFixedImage(fileName) {
+    const configUrl = new URL("verification-header.json", settings.publicUrl);
+    const imageUrl = new URL(fileName, settings.publicUrl);
+    for (let attempt = 0; attempt < 18; attempt += 1) {
+      if (attempt > 0) await delay(4000);
+      try {
+        configUrl.searchParams.set("_", `${Date.now()}-${attempt}`);
+        imageUrl.searchParams.set("_", `${Date.now()}-${attempt}`);
+        const configResponse = await fetch(configUrl.toString(), { cache: "no-store" });
+        if (!configResponse.ok) continue;
+        const config = await configResponse.json();
+        if (config.file !== fileName) continue;
+        const imageResponse = await fetch(imageUrl.toString(), { cache: "no-store" });
+        if (imageResponse.ok) return true;
+      } catch (_error) { /* Keep waiting while Pages deploys. */ }
+    }
+    return false;
+  }
+
+  function clearFixedImageMessages() {
+    elements.fixedImageStatus.hidden = true;
+    elements.fixedImageError.hidden = true;
+  }
+
+  function setFixedImageStatus(message) {
+    elements.fixedImageStatus.textContent = message;
+    elements.fixedImageStatus.hidden = false;
+    elements.fixedImageError.hidden = true;
+  }
+
+  function showFixedImageError(message) {
+    elements.fixedImageError.textContent = message;
+    elements.fixedImageError.hidden = false;
+    elements.fixedImageStatus.hidden = true;
+  }
+
   async function generateProject(slot) {
     clearMessages(slot);
     if (!window.crypto || !window.crypto.subtle || !window.QRCode) {
@@ -278,9 +471,12 @@
     }
     try {
       const rawKey = window.crypto.getRandomValues(new Uint8Array(32));
+      const id = toBase64Url(window.crypto.getRandomValues(new Uint8Array(12)));
+      const keyText = toBase64Url(rawKey);
       slot.project = {
-        id: toBase64Url(window.crypto.getRandomValues(new Uint8Array(12))),
-        key: toBase64Url(rawKey),
+        id,
+        key: keyText,
+        formCode: await deriveFormCode(id, keyText),
         baseUrl: normalizeBaseUrl(settings.publicUrl),
         createdAt: new Date().toISOString(),
       };
@@ -386,8 +582,9 @@
 
   function renderSlotState(slot) {
     const ui = slot.elements;
+    const ready = isSlotReady(slot);
     ui.card.classList.toggle("busy", slot.busy);
-    ui.publishButton.disabled = Boolean(slot.busy || !slot.project || !slot.file || !slot.needsPublish);
+    ui.publishButton.disabled = Boolean(slot.busy || !ready);
     ui.generateQrButton.disabled = slot.busy;
     ui.downloadQrButton.disabled = slot.busy;
     ui.resetTaskButton.disabled = slot.busy;
@@ -398,18 +595,24 @@
     } else if (slot.project.publishedAt && !slot.needsPublish) {
       ui.badge.textContent = "已发布";
       ui.badge.classList.add("published");
-    } else if (!slot.file) {
+    } else if (!slot.file && !slot.project.publishedAt) {
       ui.badge.textContent = "等待成品图";
-    } else {
+    } else if (ready) {
       ui.badge.textContent = slot.project.publishedAt ? "可以更新" : "可以发布";
       ui.badge.classList.add("ready");
+    } else {
+      ui.badge.textContent = "等待图片";
     }
     updateBatchState();
   }
 
+  function isSlotReady(slot) {
+    return Boolean(slot.project && !slot.busy && slot.file && slot.needsPublish);
+  }
+
   function updateBatchState() {
     if (!slots.length) return;
-    const ready = slots.filter((slot) => slot.project && slot.file && slot.needsPublish && !slot.busy).length;
+    const ready = slots.filter(isSlotReady).length;
     const published = slots.filter((slot) => slot.project && slot.project.publishedAt).length;
     elements.batchSummary.textContent = `${ready} / 3 张已准备${published ? ` · ${published} 张已发布` : ""}`;
     elements.publishAllButton.disabled = batchPublishing || ready === 0 || slots.some((slot) => slot.busy);
@@ -456,7 +659,7 @@
   }
 
   async function publishAllReady() {
-    const readySlots = slots.filter((slot) => slot.project && slot.file && slot.needsPublish && !slot.busy);
+    const readySlots = slots.filter(isSlotReady);
     if (!readySlots.length) return;
     githubToken = loadToken() || githubToken;
     if (!githubToken) {
@@ -489,8 +692,8 @@
 
   async function publishSlot(slot, waitForPages) {
     clearMessages(slot);
-    if (!slot.project || !slot.file || !slot.needsPublish) {
-      showSlotError(slot, "请先生成二维码，并选择包含该二维码的最终图片。");
+    if (!isSlotReady(slot)) {
+      showSlotError(slot, "请先生成二维码，并选择带二维码的最终图片。");
       return false;
     }
     githubToken = loadToken() || githubToken;
@@ -504,14 +707,18 @@
     slot.elements.publishButton.textContent = "正在本机加密…";
     renderSlotState(slot);
     try {
-      slot.encryptedBlob = await encryptImage(slot.file, slot.project.key);
-      slot.elements.downloadBinButton.hidden = false;
+      if (slot.file && slot.needsPublish) {
+        slot.encryptedBlob = await encryptImage(slot.file, slot.project.key);
+        slot.elements.downloadBinButton.hidden = false;
+      }
       setSlotStatus(slot, "加密完成，正在上传加密文件…");
       slot.elements.publishButton.textContent = "正在上传…";
-      const result = await uploadEncryptedFile(slot.encryptedBlob, slot.project);
-      slot.project.sha = result.sha || slot.project.sha;
-      slot.project.publishedAt = new Date().toISOString();
-      slot.needsPublish = false;
+      if (slot.encryptedBlob && slot.needsPublish) {
+        const result = await uploadEncryptedFile(slot.encryptedBlob, slot.project);
+        slot.project.sha = result.sha || slot.project.sha;
+        slot.project.publishedAt = new Date().toISOString();
+        slot.needsPublish = false;
+      }
       saveProjects();
       slot.elements.downloadBinButton.hidden = true;
 
@@ -650,6 +857,7 @@
   function projectUrl(project) {
     const url = new URL(project.baseUrl);
     url.searchParams.set("view", project.id);
+    if (project.formCode) url.searchParams.set("form", project.formCode);
     url.hash = `k=${project.key}`;
     return url.toString();
   }
@@ -708,6 +916,16 @@
     let binary = "";
     bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
     return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+
+  function toHex(bytes) {
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function deriveFormCode(fileId, keyText) {
+    const payload = new TextEncoder().encode(`huituma-form:${fileId}:${keyText}`);
+    const digest = new Uint8Array(await window.crypto.subtle.digest("SHA-256", payload));
+    return toHex(digest.slice(0, 16));
   }
 
   function fromBase64Url(value) {

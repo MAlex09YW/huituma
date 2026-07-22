@@ -11,13 +11,26 @@
     html, body { min-height: 100%; margin: 0; background: #fff; }
     [hidden] { display: none !important; }
   </style>
-  <link rel="stylesheet" href="./styles.css?v=6">
+  <link rel="stylesheet" href="./styles.css?v=8">
 </head>
 <body>
+  <main class="verification" id="verification" hidden>
+    <div class="verification-image-frame">
+      <img class="verification-image" id="verification-image" alt="" hidden>
+    </div>
+    <div class="verification-fields">
+      <input class="form-code" id="form-code" type="text" readonly tabindex="-1" aria-label="表单验证码">
+      <div class="captcha-row">
+        <input class="captcha-input" id="captcha-input" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="4" placeholder="请输入图片的验证码" aria-label="请输入图片的验证码">
+        <canvas class="captcha-canvas" id="captcha-canvas" width="436" height="132" role="img" aria-label="图片验证码"></canvas>
+      </div>
+    </div>
+    <button class="query-button" id="query-button" type="button">查询</button>
+  </main>
   <main class="viewer" id="viewer" hidden aria-live="polite">
     <img class="viewer-image" id="viewer-image" alt="" hidden>
     <p class="viewer-error" id="viewer-error" hidden></p>
   </main>
-  <script src="./app.js?v=6"></script>
+  <script src="./app.js?v=8"></script>
 </body>
 </html>

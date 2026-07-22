@@ -14,6 +14,114 @@ body {
   background: #ffffff;
 }
 
+.verification {
+  width: min(818px, calc(100% - 28px));
+  margin: 73px auto 0;
+  display: block;
+}
+
+.verification-image-frame {
+  width: 100%;
+  aspect-ratio: 818 / 419;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #cccccc;
+  background: #ffffff;
+}
+
+.verification-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.verification-fields {
+  width: min(753px, calc(100% - 68px));
+  margin: 32px auto 0;
+  display: grid;
+  gap: 32px;
+}
+
+.form-code,
+.captcha-row {
+  width: 100%;
+  height: 70px;
+  border: 2px solid #cccccc;
+  background: #fbfbfb;
+}
+
+.form-code,
+.captcha-input {
+  min-width: 0;
+  padding: 0 23px;
+  color: #333333;
+  border-radius: 0;
+  outline: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: clamp(18px, 3.9vw, 32px);
+  font-weight: 400;
+}
+
+.form-code {
+  display: block;
+}
+
+.captcha-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) min(29%, 218px);
+  overflow: hidden;
+}
+
+.captcha-input {
+  width: 100%;
+  height: 66px;
+  border: 0;
+  background: #fbfbfb;
+  font-size: clamp(18px, 3.65vw, 30px);
+}
+
+.captcha-input::placeholder {
+  color: #b9b9b9;
+  opacity: 1;
+}
+
+.captcha-canvas {
+  width: 100%;
+  height: 66px;
+  display: block;
+  border-left: 2px solid #cccccc;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.query-button {
+  width: min(352px, 55%);
+  height: 78px;
+  margin: clamp(80px, 17vh, 176px) auto 52px;
+  display: block;
+  color: #ffffff;
+  border: 0;
+  border-radius: 999px;
+  outline: 0;
+  background: #ff6500;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 36px;
+  font-weight: 400;
+  letter-spacing: 0.38em;
+  text-indent: 0.38em;
+  cursor: pointer;
+}
+
+.query-button:active {
+  background: #ef5e00;
+}
+
+.query-button:disabled {
+  cursor: default;
+}
+
 .viewer {
   min-height: 100vh;
   width: 100%;
@@ -35,4 +143,44 @@ body {
   color: #777777;
   font: 14px/1.7 system-ui, -apple-system, "Segoe UI", sans-serif;
   text-align: center;
+}
+
+@media (max-width: 520px) {
+  .verification {
+    width: calc(100% - 20px);
+    margin-top: 18px;
+  }
+
+  .verification-fields {
+    width: calc(100% - 20px);
+    margin-top: 18px;
+    gap: 18px;
+  }
+
+  .form-code,
+  .captcha-row {
+    height: 58px;
+  }
+
+  .form-code,
+  .captcha-input {
+    height: 54px;
+    padding-inline: 14px;
+  }
+
+  .captcha-row {
+    grid-template-columns: minmax(0, 1fr) min(32%, 150px);
+  }
+
+  .captcha-canvas {
+    height: 54px;
+  }
+
+  .query-button {
+    width: 56%;
+    min-width: 176px;
+    height: 56px;
+    margin-top: clamp(58px, 14vh, 105px);
+    font-size: 25px;
+  }
 }

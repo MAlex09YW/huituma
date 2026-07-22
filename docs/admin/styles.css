@@ -103,6 +103,65 @@ h1 {
   line-height: 1.85;
 }
 
+.fixed-image-panel {
+  margin-bottom: 18px;
+  padding: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+  align-items: center;
+  gap: 28px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: var(--shadow);
+}
+.fixed-image-copy h2 {
+  margin: 0 0 10px;
+  font-family: "Songti SC", STSong, serif;
+  font-size: 28px;
+  font-weight: 500;
+}
+.fixed-image-copy > p:not(.step-kicker):not(.fixed-image-error) {
+  max-width: 680px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.75;
+}
+.fixed-image-actions {
+  margin-top: 18px;
+  display: flex;
+  gap: 9px;
+}
+.fixed-image-publish-button { width: auto; }
+.fixed-image-preview-wrap {
+  min-height: 170px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--muted);
+  border: 1px dashed #b9bdb7;
+  border-radius: 14px;
+  background: #faf9f5;
+  font-size: 12px;
+}
+.fixed-image-preview-wrap img {
+  width: 100%;
+  max-height: 250px;
+  display: block;
+  object-fit: contain;
+}
+.fixed-image-status,
+.fixed-image-error {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.fixed-image-status { color: var(--green); background: var(--green-soft); }
+.fixed-image-error { color: #983b2a; background: #f9e8e3; }
+
 .batch-toolbar {
   margin-bottom: 18px;
   padding: 18px 22px;
@@ -368,6 +427,7 @@ body.viewer-active { background: white; }
   .hero { grid-template-columns: 1fr; align-items: start; gap: 28px; }
   .hero-copy { max-width: 620px; }
   .task-grid { grid-template-columns: 1fr; }
+  .fixed-image-panel { grid-template-columns: 1fr; }
   .task-card:last-child { grid-column: auto; width: auto; }
   .privacy-strip { grid-template-columns: 1fr; gap: 20px; }
 }
@@ -378,6 +438,9 @@ body.viewer-active { background: white; }
   .batch-toolbar { align-items: stretch; flex-direction: column; }
   .toolbar-actions { align-items: stretch; flex-direction: column; }
   .toolbar-actions .secondary-button { width: 100%; }
+  .fixed-image-panel { padding: 20px 16px; }
+  .fixed-image-actions { flex-direction: column; }
+  .fixed-image-actions button { width: 100%; }
   .toolbar-button { width: 100%; }
   .task-card { padding: 20px 16px; border-radius: 18px; }
   .qr-row { grid-template-columns: 116px minmax(0, 1fr); }

@@ -8,7 +8,7 @@
   <meta name="referrer" content="no-referrer">
   <meta name="robots" content="noindex,nofollow,noarchive">
   <title>信息查询页</title>
-  <link rel="stylesheet" href="./styles.css?v=6">
+  <link rel="stylesheet" href="./styles.css?v=7">
 </head>
 <body>
   <main class="studio" id="studio">
@@ -26,6 +26,25 @@
         <h1>一次完成<br>三张回图</h1>
       </div>
       <p class="hero-copy">每个任务位都有独立地址和解密钥匙。分别下载二维码、手动放进对应图片，再选择三张最终图片；可以单独发布，也可以一键发布全部。</p>
+    </section>
+
+    <section class="fixed-image-panel" aria-labelledby="fixed-image-title">
+      <div class="fixed-image-copy">
+        <p class="step-kicker">全站只设置一次</p>
+        <h2 id="fixed-image-title">固定验证页顶部图片</h2>
+        <p>这里上传的图片会显示在所有二维码的第一个验证页面；除非你重新上传替换，否则一直保持不变。它不属于任何一张成品图。</p>
+        <input id="fixed-image-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+        <div class="fixed-image-actions">
+          <button class="secondary-button" id="fixed-image-select-button" type="button">选择固定图片</button>
+          <button class="primary-button fixed-image-publish-button" id="fixed-image-publish-button" type="button" disabled>上传并设为固定图片</button>
+        </div>
+        <div class="fixed-image-status" id="fixed-image-status" role="status" hidden></div>
+        <p class="fixed-image-error" id="fixed-image-error" role="alert" hidden></p>
+      </div>
+      <div class="fixed-image-preview-wrap" id="fixed-image-preview-wrap">
+        <span id="fixed-image-placeholder">尚未选择图片</span>
+        <img id="fixed-image-preview" alt="固定验证页顶部图片预览" hidden>
+      </div>
     </section>
 
     <section class="batch-toolbar" aria-label="批量操作">
@@ -163,6 +182,6 @@
   </main>
 
   <script src="./vendor/qrcode.js"></script>
-  <script src="./app.js?v=6"></script>
+  <script src="./app.js?v=7"></script>
 </body>
 </html>
