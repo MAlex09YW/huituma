@@ -40,13 +40,17 @@
     }
 
     formCodeInput.value = expectedFormCode;
-    verification.hidden = false;
     let captchaText = drawCaptcha(captchaCanvas);
     let verified = false;
 
     // The first page uses one site-wide fixed image. It is unrelated to the
     // QR task and can be replaced independently in the publishing dashboard.
-    loadFixedVerificationImage(verificationImage).catch(() => {});
+    // Keep the whole page hidden until the image has actually decoded, so the
+    // image and verification controls appear in the same rendered frame.
+    try {
+      await loadFixedVerificationImage(verificationImage);
+    } catch (_error) { /* Keep the clean page usable if the fixed image is unavailable. */ }
+    verification.hidden = false;
 
     function refreshCaptcha() {
       captchaText = drawCaptcha(captchaCanvas);
